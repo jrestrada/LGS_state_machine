@@ -16,7 +16,7 @@ states = ['initializing',{'name':'top_elbow', 'on_enter':'crawl','on_exit':'hold
           'lateral_crawl','reached_end','retrieval','vertical_retrieval',
           'finalizing','horizontal_failure','horizontal_failure',]
 
-state_mach_params = dict(initial='initializing', title='WRPS Lateral Gamma Scanner State Machine',
+state_mach_params = dict(initial='initializing', title='WRPS Lateral Gamma Scanner State Machine', send_event= True,
                   show_conditions=True, show_state_attributes=True)
 
 def wait_for_input():
@@ -40,15 +40,17 @@ def wait_for_input():
     if selection ==1:            
         return True
 
-vertical_height = 60 # Inches
-lateral_length = 54  # Inches
-end_margin = 2       # Feet
-crawler_rate= 8      # inches per extension 
-# rc_synch = 19      # THIS SLEEP TIME MAINLY SYNCHRONIZES REEL AND CRAWLER
-rc_synch = 6         # THIS SLEEP TIME MAINLY SYNCHRONIZES REEL AND CRAWLER
-wind_rate = 1.3      # reel vel to inches 
-unwind_rate = 1.2    # reel vel to inches 
-top_elbow_buffer = 2 # Extensions to clear top elbow after IMU vertical pitch 
+vertical_height = 60  # Inches
+lateral_length = 54   # Inches
+end_margin = 2        # Feet
+crawler_rate= 8       # inches per extension 
+# rc_synch = 19       # THIS SLEEP TIME MAINLY SYNCHRONIZES REEL AND CRAWLER
+rc_synch = 6          # THIS SLEEP TIME MAINLY SYNCHRONIZES REEL AND CRAWLER
+wind_rate = 1.3       # reel vel to inches 
+unwind_rate = 1.2     # reel vel to inches 
+top_elbow_buffer = 2  # Extensions to clear top elbow after IMU vertical pitch 
+horizontal_angle = 15 # degrees
+vertical_angle = 80   # degrees
 
 
 crawler_commands = {
@@ -93,6 +95,7 @@ class StateMachineNode(Node):
         self.lidar_req.requestlidar = 1
         time.sleep(2)
 
+    def is_vertical(self, cmd ='stop', times = 1):
     def is_vertical(self, cmd ='stop', times = 1):
         self.crawl(cmd)
         self.get_logger().info("Checking if crawler has cleared top elbow")
@@ -151,6 +154,16 @@ class StateMachineNode(Node):
         self.activate_reel("stop")
         return True  
     
+
+    def current_pitch(self):
+        self.future = self._pitch_client.call_async(self.imu_req)
+        rclpy.spin_until_future_complete(self, self.future)
+        return abs(self.future.result().pitch)    
+
+    def is_hori(self):
+        self.pitch = self.current_pitch()
+        return (self.pitch < horizontal_angle & self.pitch < 100)
+
     def is_horizontal(self, cmd ='stop', times = 1):
         self.get_logger().info("Checking if crawler has cleared bottom elbow")
         self.pitch_horizontal = False
