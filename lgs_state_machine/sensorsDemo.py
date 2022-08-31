@@ -19,19 +19,22 @@ states = ['initializing',{'name':'top_elbow', 'on_enter':'engage_safety','on_exi
          {'name':'vertical_retrieval', 'on_enter':'wind_up'},
           'finalized','horizontal_failure','horizontal_failure',]
 
-state_mach_params = dict(initial='initializing', title='WRPS Lateral Gamma Scanner State Machine', send_event= True,
+state_mach_params = dict(initial='vertical_pipe', title='WRPS Lateral Gamma Scanner State Machine', send_event= True,
                   prepare_event = 'log_state' , show_conditions=True, show_state_attributes=True)
 
-vertical_height = 66  # Feet
-lateral_length = 120   # Feet
+vertical_height = 12  # Feet
+lateral_length = 10   # Feet
 end_margin = 2        # Feet
 crawler_rate= 8       # Inches per extension 
-rc_synch = 17       # THIS SLEEP TIME MAINLY SYNCHRONIZES REEL AND CRAWLER
+# rc_synch = 17       # THIS SLEEP TIME MAINLY SYNCHRONIZES REEL AND CRAWLER
+rc_synch = 5       # THIS SLEEP TIME MAINLY SYNCHRONIZES REEL AND CRAWLER
 wind_rate = 1.3       # reel vel to inches 
 unwind_rate = 1.2     # reel vel to inches 
-top_elbow_buffer = 4  # Extensions to clear top elbow after IMU vertical pitch 
+top_elbow_buffer = 2  # Extensions to clear top elbow after IMU vertical pitch 
 horizontal_angle = 15 # degrees
 vertical_angle = 80   # degrees
+
+time_from_white = 42 # seconds
 
 crawler_commands = {
     "forward":       [1,3,5,2,4,6],
@@ -45,7 +48,7 @@ crawler_commands = {
 }
 
 reel_commands = {
-    "forward":      [1,   2.22, True], 
+    "forward":      [1,   2.2, True], 
     "backward":     [-1,  2.1,  True], 
     "release":       [0,  0.0,  False],
     "engage_back":  [0,  0.0,  False],
@@ -89,7 +92,7 @@ class StateMachineNode(Node):
             else:
                 self.get_logger().info("Bottom elbow not reached")
                 self.activate_reel('unwind')
-                self.get_logger().info("Unwound : {0}".format(self.unwound_length))
+                self.get_logger().info("Unwound : {0} feet".format(self.unwound_length/12))
                 self.unwound_length += reel_commands['unwind'][0]*wind_rate
                 time.sleep(reel_commands['unwind'][1]+0.1)
         return True  
@@ -115,32 +118,27 @@ class StateMachineNode(Node):
             self.activate_crawler(event.kwargs.get('cmd'), 1 )
 
     def get_current_pitch(self):
-        self.pitch = 0
-        # self.future = self._pitch_client.call_async(self.imu_req)
-        # rclpy.spin_until_future_complete(self, self.future, timeout_sec=2)
-        # self.pitch = abs(self.future.result().pitch) 
-        if self.pitch == 0:    
-            print('type angle')
-            self.pitch = int(input()) 
-        return self.pitch
-
+        self.future = self._pitch_client.call_async(self.imu_req)
+        rclpy.spin_until_future_complete(self, self.future)
+        return abs(self.future.result().pitch)    
+        # print('type angle')
+        # pitch_fake = input()
+        # return int(pitch_fake)
+    
     def get_current_distance(self):
-        self.distance = 0
         # self.future = self._distance_client.call_async(self.lidar_req)
-        # rclpy.spin_until_future_complete(self, self.future, timeout_sec=2)
+        # rclpy.spin_until_future_complete(self, self.future)
         # self.future = self._distance_client.call_async(self.lidar_req)
-        # rclpy.spin_until_future_complete(self, self.future, timeout_sec=2)
-        # self.distance = abs(self.future.result().distance) 
-        if self.distance == 0:    
-            print('type distance')
-            self.distance = float(input())
-        
-        return self.distance
+        # rclpy.spin_until_future_complete(self, self.future)
+        # distance_fake = abs(self.future.result().distance) 
+        print('type distance')
+        distance_fake = input() 
+        return distance_fake
 
     def is_hori(self):
         self.pitch = self.get_current_pitch()
         self.get_logger().info("Angle : {0}".format(self.pitch))
-        return (self.pitch < horizontal_angle and self.pitch > 0)
+        return (self.pitch < horizontal_angle and self.pitch < 100)
 
     def is_vert(self):
         self.pitch = self.get_current_pitch()
@@ -222,13 +220,13 @@ def initialize_machine():
 
     machine.machine_attributes['ratio'] = '0.5'
        
-    _sm.get_graph().draw('lgs_state_diagram.png', prog='dot')
+    # _sm.get_graph().draw('lgs_state_diagram.png', prog='dot')
     return _sm
 
 def main(args=None):
     sm = initialize_machine()
-    sm.crawl_in(cmd = "forward_safe", times=2)
-    sm.descend(cmd = "forward_safe", times=top_elbow_buffer)
+    # sm.crawl_in(cmd = "forward_safe", times=1)
+    # sm.descend(cmd = "forward_safe", times=top_elbow_buffer)
     sm.activate_crawler(cmd = "release_back", times=1)
     sm.unwind(cmd = "forward_safe", times=1)
     sm.enter_lateral(cmd="forward", times=int(0.8*feet_to_in(lateral_length)/crawler_rate))
@@ -255,5 +253,4 @@ def main(args=None):
     sm.get_logger().info("Current State: {0}".format(sm.state))
 
 if __name__ == "__main__":
-    
     main()
